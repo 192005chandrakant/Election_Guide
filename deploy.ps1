@@ -57,12 +57,21 @@ if ([string]::IsNullOrWhiteSpace($GeminiKey)) {
 
 Set-Location "agent-service"
 
+$AgentEnvFile = Join-Path $env:TEMP "civicguide-agent-env.txt"
+@{
+    GEMINI_API_KEY = $GeminiKey
+    FIREBASE_PROJECT_ID = $ProjectID
+    ALLOWED_ORIGINS = "http://localhost:3000,https://civicguide-web-220048333239.us-central1.run.app"
+    GEMINI_MODEL = "gemini-2.0-flash"
+    GEMINI_MODELS = "gemini-2.0-flash,gemini-2.0-flash-lite,gemini-1.5-flash,gemini-1.5-flash-8b"
+} | ConvertTo-Json -Depth 3 | Set-Content -Path $AgentEnvFile -Encoding ascii
+
 # Deploy agent service
 gcloud run deploy $AgentServiceName `
     --source . `
     --region $Region `
     --allow-unauthenticated `
-    --set-env-vars="GEMINI_API_KEY=$GeminiKey,FIREBASE_PROJECT_ID=$ProjectID" `
+    --env-vars-file $AgentEnvFile `
     --memory 1Gi `
     --cpu 1 `
     --timeout 3600
@@ -73,6 +82,8 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
+
+Remove-Item -Path $AgentEnvFile -Force -ErrorAction SilentlyContinue
 $AgentURL = gcloud run services describe $AgentServiceName --region $Region --format="value(status.url)"
 Write-Host "✅ Agent Service deployed successfully at: $AgentURL" -ForegroundColor Green
 

@@ -24,6 +24,49 @@ if not GEMINI_API_KEY or genai is None:
 else:
     genai.configure(api_key=GEMINI_API_KEY)
 
+
+DEFAULT_ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "https://civicguide-web-220048333239.us-central1.run.app",
+]
+
+
+def get_allowed_origins() -> list[str]:
+    raw_origins = os.getenv("ALLOWED_ORIGINS") or os.getenv("ALLOWED_ORIGIN")
+    if raw_origins:
+        origins = [origin.strip() for origin in raw_origins.split(",") if origin.strip()]
+    else:
+        origins = DEFAULT_ALLOWED_ORIGINS[:]
+
+    unique_origins: list[str] = []
+    for origin in origins:
+        if origin not in unique_origins:
+            unique_origins.append(origin)
+    return unique_origins
+
+
+DEFAULT_GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+
+
+def get_gemini_model_candidates() -> list[str]:
+    raw_models = os.getenv("GEMINI_MODELS")
+    if raw_models:
+        candidates = [model.strip() for model in raw_models.split(",") if model.strip()]
+    else:
+        candidates = [
+            DEFAULT_GEMINI_MODEL,
+            "gemini-2.0-flash-lite",
+            "gemini-1.5-flash",
+            "gemini-1.5-flash-8b",
+        ]
+
+    unique_candidates: list[str] = []
+    for model_name in candidates:
+        if model_name and model_name not in unique_candidates:
+            unique_candidates.append(model_name)
+    return unique_candidates
+
 app = FastAPI(
     title="CivicGuide Agent API",
     description="AI-powered election assistant backend powered by Gemini",
@@ -32,7 +75,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=get_allowed_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -286,8 +329,8 @@ async def chat_endpoint(req: ChatRequest):
         print("CRITICAL: google-generativeai package is NOT installed or failed to import!")
         raise HTTPException(status_code=500, detail="Google Generative AI SDK is not installed on the server.")
 
-    # List of models to try in order of robustness for the user's specific key
-    models_to_try = ["gemini-2.5-flash", "gemini-2.0-flash-lite", "gemini-flash-latest", "gemini-pro"]
+    # Prefer supported flash models and allow overrides via environment variables.
+    models_to_try = get_gemini_model_candidates()
     last_error = None
 
     for model_name in models_to_try:
@@ -384,7 +427,7 @@ async def summarize_endpoint(req: SummarizeRequest):
         style = "for a 15-year-old using simple words and short sentences" if req.simpleMode else "clearly and concisely"
         prompt = f"Summarize the following election-related text {style}:\n\n{req.text}"
 
-        model = genai.GenerativeModel("gemini-2.5-flash")
+        model = genai.GenerativeModel(DEFAULT_GEMINI_MODEL)
         response = model.generate_content(prompt)
         return SummarizeResponse(summary=response.text)
     except Exception as e:
@@ -410,7 +453,7 @@ Format as a clear, bullet-pointed comparison that helps Indian voters understand
 Use Indian election context: refer to constituencies, ECI rules, party manifestos.
 Keep it factual and balanced."""
 
-        model = genai.GenerativeModel("gemini-2.5-flash")
+        model = genai.GenerativeModel(DEFAULT_GEMINI_MODEL)
         response = model.generate_content(prompt)
         return CandidateAnalysisResponse(analysis=response.text)
     except Exception as e:
@@ -452,7 +495,7 @@ Requirements:
 - Return only 3 lines, one step per line, no numbering, no markdown.
 """
 
-        model = genai.GenerativeModel("gemini-2.5-flash")
+        model = genai.GenerativeModel(DEFAULT_GEMINI_MODEL)
         response = model.generate_content(prompt)
         lines = [line.strip("-• \t") for line in response.text.splitlines() if line.strip()]
         steps = [line for line in lines if len(line) > 3][:3]
