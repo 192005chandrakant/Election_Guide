@@ -1,0 +1,45 @@
+query ListAllElections @auth(level: PUBLIC, insecureReason: "This operation is safe to expose to the public as it only lists general election information.") {
+  elections(orderBy: [{electionDate: DESC}]) {
+    id
+    name
+    electionDate
+    type
+    jurisdiction
+    description
+  }
+}
+
+query GetMyWatchlist @auth(level: USER, insecureReason: "This operation is safe to expose to all logged in users as it retrieves personal watchlist data based on their authentication ID.") {
+  userWatchlists(where: {userId: {eq_expr: "auth.uid"}}) {
+    id
+    createdAt
+    election {
+      id
+      name
+      electionDate
+    }
+    candidate {
+      id
+      fullName
+      partyAffiliation
+    }
+    issue {
+      id
+      name
+    }
+  }
+}
+
+mutation AddElectionToWatchlist($electionId: UUID!) @auth(level: USER, insecureReason: "This operation is safe to expose to all logged in users as it adds an election to their personal watchlist based on their authentication ID.") {
+  userWatchlist_insert(data: {
+    userId_expr: "auth.uid",
+    electionId: $electionId,
+    createdAt_expr: "request.time"
+  })
+}
+
+mutation UpdateCandidateBio($candidateId: UUID!, $newBio: String!) @auth(expr: "auth.token.admin == true") {
+  candidate_update(key: {id: $candidateId}, data: {
+    bio: $newBio
+  })
+}

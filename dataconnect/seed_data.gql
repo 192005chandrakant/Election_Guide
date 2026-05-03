@@ -1,0 +1,100 @@
+mutation CreateDemoData @transaction @auth(level: USER, insecureReason: "Seed data mutation for internal use only.") {
+  user_insertMany(data: [
+    {
+      id: "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
+      username: "voter1",
+      email: "voter1@example.com",
+      createdAt: "2023-01-01T10:00:00Z",
+      lastLogin: "2023-11-15T14:30:00Z"
+    },
+    {
+      id: "b1f0e4d7-1c3b-4a5f-8a9d-1f2e3d4c5b6a",
+      username: "voter2",
+      email: "voter2@example.com",
+      createdAt: "2023-01-05T11:00:00Z",
+      lastLogin: "2023-11-16T15:00:00Z"
+    }
+  ])
+  candidate_insertMany(data: [
+    {
+      id: "c2a3b4c5-d6e7-8f9a-b0c1-d2e3f4a5b6c7",
+      fullName: "Alice Smith",
+      partyAffiliation: "Democratic",
+      bio: "Experienced community leader.",
+      website: "https://alicesmith.com"
+    },
+    {
+      id: "d3e4f5a6-b7c8-9d0e-1f2a-3b4c5d6e7f8a",
+      fullName: "Bob Johnson",
+      partyAffiliation: "Republican",
+      bio: "Dedicated public servant.",
+      website: "https://bobjohnson.com"
+    }
+  ])
+  election_insertMany(data: [
+    {
+      id: "e4f5a6b7-c8d9-0e1f-2a3b-4c5d6e7f8a9b",
+      name: "Mayoral Election 2024",
+      electionDate: "2024-11-05",
+      type: "Municipal",
+      description: "Election for city mayor.",
+      jurisdiction: "Cityville"
+    },
+    {
+      id: "f5a6b7c8-d9e0-1f2a-3b4c-5d6e7f8a9b0c",
+      name: "State Senate District 12",
+      electionDate: "2024-11-05",
+      type: "State",
+      description: "Election for State Senate.",
+      jurisdiction: "District 12"
+    }
+  ])
+  issue_insertMany(data: [
+    {
+      id: "g6b7c8d9-e0f1-2a3b-4c5d-6e7f8a9b0c1d",
+      name: "Public Education Funding",
+      description: "Debate over increased funding for public schools.",
+      detailsUrl: "https://example.com/education"
+    },
+    {
+      id: "h7c8d9e0-f1a2-3b4c-5d6e-7f8a9b0c1d2e",
+      name: "Healthcare Reform",
+      description: "Proposals for changes to the healthcare system.",
+      detailsUrl: "https://example.com/healthcare"
+    }
+  ])
+  candidateElection_insertMany(data: [
+    {
+      candidate: { id: "c2a3b4c5-d6e7-8f9a-b0c1-d2e3f4a5b6c7" },
+      election: { id: "e4f5a6b7-c8d9-0e1f-2a3b-4c5d6e7f8a9b" },
+      office: "Mayor"
+    },
+    {
+      candidate: { id: "d3e4f5a6-b7c8-9d0e-1f2a-3b4c5d6e7f8a" },
+      election: { id: "e4f5a6b7-c8d9-0e1f-2a3b-4c5d6e7f8a9b" },
+      office: "Mayor"
+    },
+    {
+      candidate: { id: "c2a3b4c5-d6e7-8f9a-b0c1-d2e3f4a5b6c7" },
+      election: { id: "f5a6b7c8-d9e0-1f2a-3b4c-5d6e7f8a9b0c" },
+      office: "State Senator"
+    }
+  ])
+  userWatchlist_insertMany(data: [
+    {
+      user: { id: "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11" },
+      candidate: { id: "c2a3b4c5-d6e7-8f9a-b0c1-d2e3f4a5b6c7" },
+      createdAt: "2023-11-15T16:00:00Z"
+    },
+    {
+      user: { id: "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11" },
+      election: { id: "e4f5a6b7-c8d9-0e1f-2a3b-4c5d6e7f8a9b" },
+      createdAt: "2023-11-15T16:05:00Z"
+    },
+    {
+      user: { id: "b1f0e4d7-1c3b-4a5f-8a9d-1f2e3d4c5b6a" },
+      issue: { id: "g6b7c8d9-e0f1-2a3b-4c5d-6e7f8a9b0c1d" },
+      createdAt: "2023-11-16T16:10:00Z"
+    }
+  ])
+}

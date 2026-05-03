@@ -1,0 +1,22 @@
+<svg width="192" height="192" viewBox="0 0 192 192" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">CivicGuide mark</title>
+  <desc id="desc">Shield, check, and navigation mark for CivicGuide.</desc>
+  <defs>
+    <linearGradient id="shield" x1="24" y1="17" x2="169" y2="178" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2563EB"/>
+      <stop offset="0.42" stop-color="#06B6D4"/>
+      <stop offset="1" stop-color="#10B981"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="86" y1="45" x2="156" y2="158" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F59E0B"/>
+      <stop offset="0.52" stop-color="#F43F5E"/>
+      <stop offset="1" stop-color="#7C3AED"/>
+    </linearGradient>
+  </defs>
+  <rect width="192" height="192" rx="48" fill="#F8FAFC"/>
+  <path d="M96 15L166 42.5V91.8C166 135.4 138.5 171.6 96 187C53.5 171.6 26 135.4 26 91.8V42.5L96 15Z" fill="url(#shield)"/>
+  <path d="M96 31L151 52.8V92C151 127.8 130 158.5 96 172C62 158.5 41 127.8 41 92V52.8L96 31Z" fill="white" fill-opacity="0.14"/>
+  <path d="M73 94L90.5 111.5L123.5 69" stroke="white" stroke-width="15" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M131 126L153.5 148.5" stroke="url(#accent)" stroke-width="12" stroke-linecap="round"/>
+  <circle cx="155" cy="150" r="14" fill="url(#accent)" stroke="white" stroke-width="6"/>
+</svg>
