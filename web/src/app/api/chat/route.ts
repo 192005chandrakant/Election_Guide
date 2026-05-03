@@ -85,6 +85,7 @@ export async function POST(request: NextRequest) {
     const response = await fetch(`${AGENT_SERVICE_URL}/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      cache: "no-store",
       signal: controller.signal,
       body: JSON.stringify({
         query: query.trim(),
@@ -101,9 +102,16 @@ export async function POST(request: NextRequest) {
       let errorDetail = "Agent service error";
       try {
         const errorData = await response.json();
-        errorDetail = errorData.detail || errorDetail;
+        errorDetail = errorData.detail || errorData.error || errorDetail;
       } catch {}
-      throw new Error(errorDetail);
+
+      return NextResponse.json(
+        {
+          error: errorDetail,
+          upstreamStatus: response.status,
+        },
+        { status: response.status }
+      );
     }
 
     const data = await response.json();

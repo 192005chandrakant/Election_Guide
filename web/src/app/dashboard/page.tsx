@@ -40,6 +40,7 @@ import { useAppSettings } from "@/lib/settings-context";
 import { downloadICS, generateICS } from "@/lib/calendar";
 import { TrustStrip } from "@/components/civic-ui";
 import { PremiumCivicShowcase } from "@/components/premium-civic-components";
+import { trackCivicEvent } from "@/lib/analytics";
 
 const INITIAL_CHECKLIST = [
   { id: "registered", label: "Registered as Voter (ECI)", completed: true },
@@ -296,7 +297,25 @@ export default function Dashboard() {
     }
   }, [score, voiceEnabled, speak, profileLoaded]);
 
-  const saveChecklist = async (nextChecklist: typeof INITIAL_CHECKLIST) => {
+  useEffect(() => {
+    if (!profileLoaded) {
+      return;
+    }
+
+    trackCivicEvent({
+      eventName: "level_progress_viewed",
+      userId: user?.uid || "demo",
+      metadata: {
+        level: Math.max(1, Math.floor(engagementPoints / 100) + 1),
+        engagementPoints,
+      },
+    });
+  }, [profileLoaded, user?.uid, engagementPoints]);
+
+  const saveChecklist = async (
+    nextChecklist: typeof INITIAL_CHECKLIST,
+    overrides?: { engagementPoints?: number; streakDays?: number }
+  ) => {
     setIsSyncing(true);
     try {
       await fetch("/api/user", {
@@ -307,8 +326,8 @@ export default function Dashboard() {
           checklistProgress: toChecklistProgress(nextChecklist),
           location,
           isFirstTimeVoter,
-          engagementPoints,
-          streakDays,
+          engagementPoints: overrides?.engagementPoints ?? engagementPoints,
+          streakDays: overrides?.streakDays ?? streakDays,
         }),
       });
     } catch (error) {
@@ -367,17 +386,43 @@ export default function Dashboard() {
 
   const toggleChecklist = (id: string) => {
     setChecklist((prev) => {
+      const target = prev.find((item) => item.id === id);
+      const wasCompleted = Boolean(target?.completed);
       const nextChecklist = prev.map((item) =>
         item.id === id ? { ...item, completed: !item.completed } : item
       );
+
+      const nextPoints = Math.max(0, engagementPoints + (wasCompleted ? -15 : 30));
+      const nextStreak = Math.max(1, streakDays + (wasCompleted ? -1 : 1));
+
+      setEngagementPoints(nextPoints);
+      setStreakDays(nextStreak);
       setConfettiDismissed(false);
-      void saveChecklist(nextChecklist);
+      trackCivicEvent({
+        eventName: "checklist_toggled",
+        userId: user?.uid || "demo",
+        metadata: {
+          itemId: id,
+          completed: !wasCompleted,
+          engagementPoints: nextPoints,
+          streakDays: nextStreak,
+        },
+      });
+      void saveChecklist(nextChecklist, {
+        engagementPoints: nextPoints,
+        streakDays: nextStreak,
+      });
       return nextChecklist;
     });
   };
 
   const handleShare = useCallback(async () => {
     const text = `🗳️ My CivicGuide Voter Readiness Score: ${score}%!\n\nI'm getting ready for Election Day. Are you? Check your readiness at CivicGuide.`;
+    trackCivicEvent({
+      eventName: "score_shared",
+      userId: user?.uid || "demo",
+      metadata: { score },
+    });
     if (navigator.share) {
       try {
         await navigator.share({ title: "My Voter Readiness Score", text });
@@ -387,7 +432,7 @@ export default function Dashboard() {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
-  }, [score]);
+  }, [score, user?.uid]);
 
   const earnedBadges = BADGES.filter((_, i) => {
     const completed = checklist.filter((c) => c.completed).length;
@@ -395,6 +440,7 @@ export default function Dashboard() {
   });
   const level = Math.max(1, Math.floor(engagementPoints / 100) + 1);
   const pointsToNextLevel = 100 - (engagementPoints % 100);
+  const levelProgress = engagementPoints % 100;
   const completionCount = checklist.filter((c) => c.completed).length;
   const questProgress = Math.round((completionCount / checklist.length) * 100);
   const questLabel =
@@ -594,6 +640,14 @@ export default function Dashboard() {
                 ))}
               </div>
 
+              <div className="rounded-2xl border border-foreground/10 bg-background/55 p-3">
+                <div className="mb-2 flex items-center justify-between gap-2 text-xs">
+                  <p className="text-muted-foreground">Level {level} progression</p>
+                  <p className="font-medium text-primary">{pointsToNextLevel} XP to Level {level + 1}</p>
+                </div>
+                <Progress value={levelProgress} className="h-2" aria-label={`Level progress ${levelProgress} percent`} />
+              </div>
+
               {isSyncing && (
                 <motion.p animate={{ opacity: [1, 0.5, 1] }} transition={{ duration: 1.5, repeat: Infinity }} className="text-xs text-muted-foreground flex items-center gap-1.5">
                   <Loader2 className="h-3.5 w-3.5 animate-spin" /> Syncing your progress...
@@ -616,7 +670,6 @@ export default function Dashboard() {
                         ? "gradient-card-primary border-0"
                         : "gradient-card-secondary border-0 hover:shadow-lg"
                     }`}
-                    onClick={() => toggleChecklist(item.id)}
                   >
                     <Checkbox
                       id={item.id}

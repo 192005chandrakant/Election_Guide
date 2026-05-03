@@ -21,6 +21,12 @@ import {
   Clock3,
   FileText,
   Smartphone,
+  Vote,
+  Target,
+  Accessibility,
+  CheckSquare,
+  Route,
+  Shield,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -53,6 +59,181 @@ type HomeContent = {
   onboardingSteps: HomeStep[];
   supportPillars: HomePillar[];
 };
+
+const DEFAULT_QUICK_ACTIONS: HomeAction[] = [
+  {
+    title: "Check your readiness score",
+    description: "See what is complete, what is missing, and what to do next before election day.",
+    href: "/dashboard",
+  },
+  {
+    title: "Find your polling station",
+    description: "Locate your correct booth, reduce travel uncertainty, and plan timing in advance.",
+    href: "/map",
+  },
+  {
+    title: "Compare candidates confidently",
+    description: "Use issue-based summaries to compare candidates without information overload.",
+    href: "/candidates",
+  },
+  {
+    title: "Prepare offline election kit",
+    description: "Keep key documents, checklist steps, and voting plan available even with weak network.",
+    href: "/kit",
+  },
+];
+
+const DEFAULT_ONBOARDING_STEPS: HomeStep[] = [
+  {
+    step: "1",
+    title: "Set your voter context",
+    description: "Add your location and profile so guidance reflects your constituency and voter journey.",
+  },
+  {
+    step: "2",
+    title: "Track readiness progress",
+    description: "Follow your checklist for registration, booth, ID, research, and voting-day planning.",
+  },
+  {
+    step: "3",
+    title: "Use AI guidance at each step",
+    description: "Ask questions in plain language and get practical, action-focused next steps.",
+  },
+  {
+    step: "4",
+    title: "Finalize and vote with confidence",
+    description: "Save your ballot choices, reminders, and offline resources for a stress-free voting day.",
+  },
+];
+
+const DEFAULT_SUPPORT_PILLARS: HomePillar[] = [
+  {
+    title: "Trusted source visibility",
+    body: "Each core module emphasizes source confidence so users understand what is verified and what is fallback.",
+  },
+  {
+    title: "Decision clarity",
+    body: "Complex election tasks are broken into manageable actions to reduce confusion and decision fatigue.",
+  },
+  {
+    title: "Inclusive experience",
+    body: "Accessibility controls, simple language patterns, and adaptive guidance support a wide range of users.",
+  },
+  {
+    title: "Time-sensitive nudges",
+    body: "Timeline and reminders keep voters focused on deadlines, preparation, and voting-day execution.",
+  },
+];
+
+const SERVICE_DEEP_DIVES = [
+  {
+    title: "Readiness Engine",
+    icon: CheckSquare,
+    href: "/dashboard",
+    summary: "A personalized mission board for voter preparation.",
+    benefits: [
+      "Turns complex election prep into a clear checklist.",
+      "Calculates readiness score and highlights missing actions.",
+      "Rewards progress with levels, streaks, and civic XP.",
+    ],
+  },
+  {
+    title: "AI Election Assistant",
+    icon: Bot,
+    href: "/assistant",
+    summary: "On-demand guidance for election questions in plain language.",
+    benefits: [
+      "Explains steps and procedures in simple terms.",
+      "Adapts answers based on user context and readiness.",
+      "Provides practical next actions, not generic theory.",
+    ],
+  },
+  {
+    title: "Candidate Intelligence",
+    icon: Target,
+    href: "/candidates",
+    summary: "Issue-based comparison to support informed decisions.",
+    benefits: [
+      "Compares candidates by topics users care about.",
+      "Reduces information overload with structured summaries.",
+      "Makes trade-offs easier to understand before voting.",
+    ],
+  },
+  {
+    title: "Polling Navigation",
+    icon: Route,
+    href: "/map",
+    summary: "Booth discovery and route planning for voting day.",
+    benefits: [
+      "Helps users confirm and reach the correct polling station.",
+      "Improves confidence with location-aware planning.",
+      "Reduces last-minute delays and missed voting windows.",
+    ],
+  },
+  {
+    title: "Offline Election Kit",
+    icon: FileDown,
+    href: "/kit",
+    summary: "Preparedness tools designed for low-connectivity moments.",
+    benefits: [
+      "Keeps essential voting info available without network.",
+      "Supports practical voting-day execution under constraints.",
+      "Provides continuity in unstable connectivity conditions.",
+    ],
+  },
+  {
+    title: "Trust and Verification Layer",
+    icon: Shield,
+    href: "/guide",
+    summary: "Transparency patterns that strengthen user confidence.",
+    benefits: [
+      "Shows verified vs fallback information clearly.",
+      "Reinforces accountability through source signaling.",
+      "Helps users judge reliability of election guidance.",
+    ],
+  },
+] as const;
+
+const USER_VALUE_TRACKS = [
+  {
+    title: "For first-time voters",
+    icon: Vote,
+    body: "Guided onboarding, simplified election language, and step-by-step planning remove fear and uncertainty.",
+  },
+  {
+    title: "For busy working citizens",
+    icon: Sparkles,
+    body: "Action-oriented summaries, reminders, and prioritization help users prepare quickly without missing critical tasks.",
+  },
+  {
+    title: "For accessibility-first users",
+    icon: Accessibility,
+    body: "Voice support, readability controls, and inclusive interaction design keep election information usable for more people.",
+  },
+] as const;
+
+const PLATFORM_FAQ = [
+  {
+    question: "What does CivicGuide do in one sentence?",
+    answer:
+      "CivicGuide helps users become vote-ready by combining readiness tracking, AI guidance, trusted election information, booth planning, and offline support.",
+  },
+  {
+    question: "How is this useful beyond basic election information?",
+    answer:
+      "The platform turns information into concrete actions, so users do not just read election facts but actually complete preparation tasks.",
+  },
+  {
+    question: "Why does gamification matter here?",
+    answer:
+      "Levels, streaks, and civic XP create momentum and help users stay engaged long enough to complete essential voting preparation.",
+  },
+  {
+    question: "How does CivicGuide build trust?",
+    answer:
+      "Source signaling, fallback transparency, and clear context labels help users understand confidence and reliability of each output.",
+  },
+] as const;
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -99,9 +280,9 @@ export default function Home() {
     };
   }, []);
 
-  const quickActions = content?.quickActions ?? [];
-  const onboardingSteps = content?.onboardingSteps ?? [];
-  const supportPillars = content?.supportPillars ?? [];
+  const quickActions = content?.quickActions?.length ? content.quickActions : DEFAULT_QUICK_ACTIONS;
+  const onboardingSteps = content?.onboardingSteps?.length ? content.onboardingSteps : DEFAULT_ONBOARDING_STEPS;
+  const supportPillars = content?.supportPillars?.length ? content.supportPillars : DEFAULT_SUPPORT_PILLARS;
   const heroTitle = content?.heroTitle ?? "Empower your vote in Indian elections.";
   const heroDescription =
     content?.heroDescription ??
@@ -285,6 +466,73 @@ export default function Home() {
             initial="hidden"
             whileInView="visible"
             viewport={{ once: true, margin: "-100px" }}
+            className="space-y-6"
+          >
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Platform Services</p>
+              <h2 className="font-heading text-2xl sm:text-3xl font-bold tracking-tight">What CivicGuide provides and why it matters</h2>
+              <p className="max-w-3xl text-sm sm:text-base leading-relaxed text-muted-foreground">
+                CivicGuide is not only an information page. It is a complete voter-preparation platform that helps users plan, decide, and act with confidence from the first visit to voting day.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {SERVICE_DEEP_DIVES.map((service) => (
+                <motion.div key={service.title} variants={itemVariants}>
+                  <Link href={service.href} className="group block h-full">
+                    <Card className="h-full border-foreground/10 bg-card/82 backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:border-primary/30 hover:shadow-[0_24px_70px_-34px] hover:shadow-primary/40">
+                      <CardContent className="h-full p-5">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/12 text-primary group-hover:bg-primary/20 transition-colors">
+                            <service.icon className="h-5 w-5" />
+                          </div>
+                          <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all" />
+                        </div>
+                        <h3 className="mt-4 font-semibold text-lg leading-tight">{service.title}</h3>
+                        <p className="mt-1 text-sm text-muted-foreground">{service.summary}</p>
+                        <ul className="mt-4 space-y-2 text-sm text-foreground/90">
+                          {service.benefits.map((benefit) => (
+                            <li key={benefit} className="flex gap-2 leading-relaxed">
+                              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                              <span>{benefit}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </CardContent>
+                    </Card>
+                  </Link>
+                </motion.div>
+              ))}
+            </div>
+          </motion.div>
+
+          <motion.div
+            variants={containerVariants}
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true, margin: "-100px" }}
+            className="grid grid-cols-1 md:grid-cols-3 gap-4"
+          >
+            {USER_VALUE_TRACKS.map((track) => (
+              <motion.div key={track.title} variants={itemVariants}>
+                <Card className="h-full gradient-card-accent rounded-2xl border-0 overflow-hidden">
+                  <CardContent className="p-5">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent/20 text-accent">
+                      <track.icon className="h-5 w-5" />
+                    </div>
+                    <h3 className="mt-3 text-base font-semibold">{track.title}</h3>
+                    <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{track.body}</p>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            ))}
+          </motion.div>
+
+          <motion.div
+            variants={containerVariants}
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true, margin: "-100px" }}
             className="grid gap-4 lg:grid-cols-[1.05fr_0.95fr]"
           >
             <Card className="gradient-card-primary rounded-2xl sm:rounded-3xl overflow-hidden border-0">
@@ -387,6 +635,31 @@ export default function Home() {
                 </div>
               </CardContent>
             </Card>
+          </motion.div>
+
+          <motion.div
+            variants={containerVariants}
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true, margin: "-100px" }}
+            className="space-y-4"
+          >
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-secondary">Clarity for users</p>
+              <h2 className="mt-2 font-heading text-2xl sm:text-3xl font-bold tracking-tight">Frequently asked: how this platform helps</h2>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {PLATFORM_FAQ.map((item) => (
+                <motion.div key={item.question} variants={itemVariants}>
+                  <Card className="h-full gradient-card-secondary rounded-2xl border-0">
+                    <CardContent className="p-5">
+                      <h3 className="text-base font-semibold leading-snug">{item.question}</h3>
+                      <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{item.answer}</p>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              ))}
+            </div>
           </motion.div>
 
           <motion.div

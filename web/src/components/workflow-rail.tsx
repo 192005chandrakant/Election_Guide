@@ -72,7 +72,7 @@ export function WorkflowRail({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-2 text-center md:min-w-0 md:w-[260px]">
+          <div className="grid grid-cols-2 gap-2 text-center md:min-w-0 md:w-65">
             <div className="rounded-2xl border border-foreground/10 bg-background/70 px-3 py-2">
               <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">XP</p>
               <motion.p className="mt-1 text-lg font-semibold" aria-live="polite">

@@ -207,3 +207,36 @@ Accent:     #fbbf24 (Amber/Gold)  - Important alerts
 ---
 
 **Status**: ✨ Complete - Ready for testing and refinement
+
+---
+
+## Update: May 3, 2026 - Responsive + Gamification + Analytics Completion
+
+### What Was Enhanced
+- Improved shared responsiveness and layout behavior across key user flows (`dashboard`, `guide`, and shared UI blocks).
+- Enhanced existing gamification (instead of duplicating it):
+  - XP and streak updates tied to checklist interactions.
+  - Level progression visibility with a dedicated progress indicator.
+  - Guide-level progression cues and mood labels for clearer motivation.
+- Added analytics event tracking pipeline:
+  - Client tracker utility: `web/src/lib/analytics.ts`
+  - API ingestion route: `web/src/app/api/analytics/route.ts`
+  - Firestore collection: `analytics_events`
+
+### Tracked Gamification Events
+- `guide_viewed`
+- `guide_progress_seen`
+- `checklist_toggled`
+- `score_shared`
+- `level_progress_viewed`
+
+### Stability and Accessibility Updates
+- Added safe-area utility helpers and reduced-motion CSS behavior in `web/src/app/globals.css`.
+- Hardened guide progress computation to avoid divide-by-zero when timeline steps are empty.
+
+### Verification
+- Lint checks completed successfully (`npm run lint`).
+- File diagnostics for modified files reported no errors.
+
+### Remaining Optional Follow-Up
+- Device-level manual QA on iOS Safari and Android Chrome for final touch/viewport tuning.

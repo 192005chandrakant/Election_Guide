@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const ALLOW_HEADERS = "Content-Type, Authorization, X-Requested-With";
+const ALLOW_HEADERS = "Origin, Content-Type, Accept, Authorization, X-Requested-With, X-CSRF-Token";
 const ALLOW_METHODS = "GET, POST, PUT, PATCH, DELETE, OPTIONS";
 
-function applyCorsHeaders(response: NextResponse) {
-  response.headers.set("Access-Control-Allow-Origin", "*");
+function applyCorsHeaders(request: NextRequest, response: NextResponse) {
+  const origin = request.headers.get("origin");
+
+  response.headers.set("Access-Control-Allow-Origin", origin || "*");
   response.headers.set("Access-Control-Allow-Methods", ALLOW_METHODS);
   response.headers.set("Access-Control-Allow-Headers", ALLOW_HEADERS);
   response.headers.set("Access-Control-Max-Age", "86400");
@@ -12,12 +14,12 @@ function applyCorsHeaders(response: NextResponse) {
   return response;
 }
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   if (request.method === "OPTIONS") {
-    return applyCorsHeaders(new NextResponse(null, { status: 204 }));
+    return applyCorsHeaders(request, new NextResponse(null, { status: 204 }));
   }
 
-  return applyCorsHeaders(NextResponse.next());
+  return applyCorsHeaders(request, NextResponse.next());
 }
 
 export const config = {

@@ -57,7 +57,7 @@ export function PageHeader({
           <p className="mt-1 max-w-2xl text-sm leading-relaxed text-muted-foreground md:text-base">{description}</p>
         </div>
       </div>
-      {action && <div className="shrink-0">{action}</div>}
+      {action && <div className="w-full md:w-auto md:shrink-0">{action}</div>}
     </header>
   );
 }

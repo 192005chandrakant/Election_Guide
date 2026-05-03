@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { 
   Menu, X, Send, Trash2, ShieldCheck, Accessibility, 
@@ -89,7 +89,7 @@ const FALLBACK_AGENTS: AgentInfo[] = [
   { id: "accessibility", title: "Accessibility Helper", description: "Provides simple, readable guidance.", icon: "accessibility", promptFocus: "Focus on accessible voting options." },
 ];
 
-export default function AssistantPage() {
+function AssistantPageContent() {
   const { language, simpleMode, voiceEnabled, speak, stopSpeaking } = useAppSettings();
   const { user } = useAuth();
   const searchParams = useSearchParams();
@@ -608,5 +608,19 @@ export default function AssistantPage() {
       </main>
 
     </div>
+  );
+}
+
+export default function AssistantPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-dvh items-center justify-center bg-background px-4 text-sm text-muted-foreground">
+          Loading assistant workspace...
+        </div>
+      }
+    >
+      <AssistantPageContent />
+    </Suspense>
   );
 }

@@ -17,8 +17,13 @@ function getAdminApp(): admin.app.App {
   }
 
   if (admin.apps.length > 0) {
-    adminApp = admin.apps[0];
-    return adminApp;
+    const existingApp = admin.apps[0];
+    if (!existingApp) {
+      throw new Error("Firebase Admin app list was populated but no app instance was available.");
+    }
+
+    adminApp = existingApp;
+    return existingApp;
   }
 
   // Service account key is expected at the root of the project
