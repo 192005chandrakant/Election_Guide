@@ -13,9 +13,7 @@ type NextStepsResponse = {
   source: string;
 };
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = "gemini-2.0-flash";
-const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+const AGENT_SERVICE_URL = process.env.AGENT_SERVICE_URL || "http://127.0.0.1:8000";
 
 const DEFAULT_CHECKLIST: ChecklistProgress = {
   registered: true,
@@ -84,61 +82,6 @@ function buildFallbackResponse(checklistProgress: ChecklistProgress): NextStepsR
   };
 }
 
-function buildPrompt(params: {
-  userId: string;
-  location: string;
-  isFirstTimeVoter: boolean;
-  language: string;
-  simpleMode: boolean;
-  checklistProgress: ChecklistProgress;
-}) {
-  const pendingItems = Object.entries(params.checklistProgress)
-    .filter(([, value]) => !value)
-    .map(([key]) => key);
-
-  const styleHint = params.simpleMode
-    ? "Use very simple words and short sentences suitable for a teenager."
-    : "Use plain, concise, professional language.";
-
-  return `You are a non-partisan election readiness coach.
-
-User context:
-- User ID: ${params.userId}
-- Location: ${params.location}
-- First-time voter: ${params.isFirstTimeVoter}
-- Language code: ${params.language}
-- Pending checklist items: ${pendingItems.length ? pendingItems.join(", ") : "none"}
-
-Requirements:
-- ${styleHint}
-- Generate exactly 3 short next-action steps.
-- Focus on practical actions for the next 7 days.
-- Keep each step under 20 words.
-- Return ONLY valid JSON with this exact shape:
-{
-  "steps": ["step 1", "step 2", "step 3"]
-}`;
-}
-
-function parseGeminiJson(rawText: string): string[] | null {
-  const cleaned = rawText.trim().replace(/^```json\s*/i, "").replace(/```$/i, "").trim();
-
-  try {
-    const parsed = JSON.parse(cleaned) as { steps?: unknown };
-    if (!Array.isArray(parsed.steps)) return null;
-
-    const steps = parsed.steps
-      .filter((step): step is string => typeof step === "string")
-      .map((step) => step.trim())
-      .filter(Boolean)
-      .slice(0, 3);
-
-    return steps.length ? steps : null;
-  } catch {
-    return null;
-  }
-}
-
 async function generateNextStepsFromGemini(params: {
   userId: string;
   location: string;
@@ -147,43 +90,21 @@ async function generateNextStepsFromGemini(params: {
   simpleMode: boolean;
   checklistProgress: ChecklistProgress;
 }): Promise<NextStepsResponse> {
-  if (!GEMINI_API_KEY) {
-    return buildFallbackResponse(params.checklistProgress);
-  }
-
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 15000);
 
   try {
-    const response = await fetch(`${GEMINI_ENDPOINT}?key=${encodeURIComponent(GEMINI_API_KEY)}`, {
+    const response = await fetch(`${AGENT_SERVICE_URL}/next-steps`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       signal: controller.signal,
       body: JSON.stringify({
-        systemInstruction: {
-          parts: [
-            {
-              text: buildPrompt(params),
-            },
-          ],
-        },
-        contents: [
-          {
-            role: "user",
-            parts: [
-              {
-                text: "Generate the three next steps now.",
-              },
-            ],
-          },
-        ],
-        generationConfig: {
-          temperature: 0.35,
-          topP: 0.9,
-          topK: 32,
-          maxOutputTokens: 400,
-          responseMimeType: "application/json",
-        },
+        userId: params.userId,
+        location: params.location,
+        isFirstTimeVoter: params.isFirstTimeVoter,
+        language: params.language,
+        simpleMode: params.simpleMode,
+        checklistProgress: params.checklistProgress,
       }),
     });
 
@@ -191,15 +112,29 @@ async function generateNextStepsFromGemini(params: {
       return buildFallbackResponse(params.checklistProgress);
     }
 
-    const data = await response.json();
-    const text = data?.candidates?.[0]?.content?.parts?.map((part: { text?: string }) => part.text || "").join("") || "";
-    const steps = parseGeminiJson(text);
-
-    if (!steps) {
+    const data = (await response.json()) as { steps?: unknown; source?: unknown };
+    if (!Array.isArray(data.steps)) {
       return buildFallbackResponse(params.checklistProgress);
     }
 
-    return { steps, source: "gemini" };
+    const steps = data.steps
+      .filter((step): step is string => typeof step === "string")
+      .map((step) => step.trim())
+      .filter(Boolean)
+      .slice(0, 3);
+
+    if (!steps.length) {
+      return buildFallbackResponse(params.checklistProgress);
+    }
+
+    while (steps.length < 3) {
+      steps.push(getRuleBasedSteps(params.checklistProgress)[steps.length]);
+    }
+
+    return {
+      steps: steps.slice(0, 3),
+      source: typeof data.source === "string" ? data.source : "agent-service",
+    };
   } catch {
     return buildFallbackResponse(params.checklistProgress);
   } finally {

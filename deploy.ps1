@@ -35,43 +35,27 @@ gcloud services enable run.googleapis.com cloudbuild.googleapis.com
 # 2. Deploy Python Agent Service
 Write-Host "`n[3/5] Deploying Python Agent Service to Cloud Run..." -ForegroundColor Yellow
 
-# Load Gemini key from .env or web/.env.local
-$GeminiKey = ""
-$EnvFile = "agent-service/.env"
-if (Test-Path $EnvFile) {
-    $GeminiKey = (Select-String -Path $EnvFile -Pattern "^GEMINI_API_KEY=(.*)$" | ForEach-Object { $_.Matches[0].Groups[1].Value })
-}
-
-# Fallback to web/.env.local if not found
-if ([string]::IsNullOrWhiteSpace($GeminiKey)) {
-    $WebEnvFile = "web/.env.local"
-    if (Test-Path $WebEnvFile) {
-        $GeminiKey = (Select-String -Path $WebEnvFile -Pattern "^GEMINI_API_KEY=(.*)$" | ForEach-Object { $_.Matches[0].Groups[1].Value })
-    }
-}
-
-if ([string]::IsNullOrWhiteSpace($GeminiKey)) {
-    Write-Host "⚠️  Warning: GEMINI_API_KEY not found in .env files. Using placeholder." -ForegroundColor Yellow
-    $GeminiKey = "your-gemini-api-key-here"
-}
-
 Set-Location "agent-service"
 
 $AgentEnvFile = Join-Path $env:TEMP "civicguide-agent-env.txt"
 @{
-    GEMINI_API_KEY = $GeminiKey
     FIREBASE_PROJECT_ID = $ProjectID
     ALLOWED_ORIGINS = "http://localhost:3000,https://civicguide-web-220048333239.us-central1.run.app"
-    GEMINI_MODEL = "gemini-2.0-flash"
-    GEMINI_MODELS = "gemini-2.0-flash,gemini-2.0-flash-lite,gemini-1.5-flash,gemini-1.5-flash-8b"
+    GEMINI_MODEL = "gemini-2.0-flash-lite"
+    ALLOWED_GEMINI_MODELS = "gemini-2.0-flash-lite,gemini-2.0-flash-lite-001,gemini-flash-lite-latest,gemini-2.0-flash,gemini-2.0-flash-001,gemini-2.5-flash,gemini-flash-latest,gemini-1.5-flash,gemini-1.5-flash-8b"
+    GEMINI_MODELS = "gemini-2.0-flash-lite,gemini-2.0-flash,gemini-2.5-flash,gemini-1.5-flash"
 } | ConvertTo-Json -Depth 3 | Set-Content -Path $AgentEnvFile -Encoding ascii
 
 # Deploy agent service
+# Bind sensitive values from Secret Manager into Cloud Run using --set-secrets
+$secretBindings = "GEMINI_API_KEY=GEMINI_API_KEY:latest,FIREBASE_SERVICE_ACCOUNT_JSON=FIREBASE_SERVICE_ACCOUNT_JSON:latest"
+
 gcloud run deploy $AgentServiceName `
     --source . `
     --region $Region `
     --allow-unauthenticated `
     --env-vars-file $AgentEnvFile `
+    --set-secrets $secretBindings `
     --memory 1Gi `
     --cpu 1 `
     --timeout 3600
@@ -100,7 +84,7 @@ if (Test-Path $EnvFile) {
     foreach ($line in Get-Content $EnvFile) {
         $trimmedLine = $line.Trim()
         if ($trimmedLine -and -not $trimmedLine.StartsWith("#")) {
-            if ($trimmedLine.StartsWith("NEXT_PUBLIC_") -or $trimmedLine.StartsWith("GEMINI_API_KEY=")) {
+            if ($trimmedLine.StartsWith("NEXT_PUBLIC_")) {
                 $EnvVars += $trimmedLine
             }
         }

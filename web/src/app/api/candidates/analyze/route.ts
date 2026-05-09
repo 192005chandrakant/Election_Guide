@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = "gemini-2.0-flash";
-const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+const AGENT_SERVICE_URL = process.env.AGENT_SERVICE_URL || "http://127.0.0.1:8000";
 
 type CandidateAnalysisRequest = {
   candidateNames: string[];
@@ -15,103 +13,46 @@ type CandidateAnalysisResponse = {
   source: string;
 };
 
-function buildPrompt(params: CandidateAnalysisRequest) {
-  return `You are a neutral Indian election research assistant for the CivicGuide platform.
-
-Location: ${params.location}
-Candidates or Parties: ${params.candidateNames.join(", ")}
-Issues to compare: ${params.issues.join(", ")}
-
-Requirements:
-- Be completely non-partisan and objective.
-- Avoid endorsements, speculation, and personal opinions.
-- Use Indian election terminology: constituency, Lok Sabha, State Assembly, ECI, manifesto.
-- Structure clearly with markdown headings and bullet points.
-- Help voters compare candidates on real issues that matter to them.
-- Return ONLY valid JSON with this exact shape:
-{
-  "analysis": "markdown-formatted analysis",
-  "summary": "one-sentence neutral summary",
-  "source": "gemini",
-  "confidence": "high|medium|low",
-  "disclaimer": "short verification note referencing ECI"
-}`;
-}
-
-function parseGeminiJson(rawText: string): CandidateAnalysisResponse | null {
-  const cleaned = rawText.trim().replace(/^```json\s*/i, "").replace(/```$/i, "").trim();
-
-  try {
-    const parsed = JSON.parse(cleaned) as { analysis?: unknown; source?: unknown };
-    if (typeof parsed.analysis !== "string" || !parsed.analysis.trim()) {
-      return null;
-    }
-
-    return {
-      analysis: parsed.analysis,
-      source: typeof parsed.source === "string" ? parsed.source : "gemini",
-    };
-  } catch {
-    return null;
-  }
+function buildFallbackAnalysis(params: CandidateAnalysisRequest): CandidateAnalysisResponse {
+  return {
+    analysis:
+      `Gemini was unavailable, so compare ${params.candidateNames.join(", ")} using official manifestos, affidavits, and ECI disclosures. ` +
+      `Focus on ${params.issues.join(", ") || "your priority issues"} and verify every factual claim before deciding.`,
+    source: "fallback",
+  };
 }
 
 async function generateCandidateAnalysis(params: CandidateAnalysisRequest): Promise<CandidateAnalysisResponse> {
-  if (!GEMINI_API_KEY) {
-    throw new Error("GEMINI_API_KEY is not configured");
-  }
-
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 12000);
 
   try {
-    const response = await fetch(`${GEMINI_ENDPOINT}?key=${encodeURIComponent(GEMINI_API_KEY)}`, {
+    const response = await fetch(`${AGENT_SERVICE_URL}/analyze-candidates`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       signal: controller.signal,
       body: JSON.stringify({
-        systemInstruction: {
-          parts: [
-            {
-              text: buildPrompt(params),
-            },
-          ],
-        },
-        contents: [
-          {
-            role: "user",
-            parts: [
-              {
-                text: "Generate the candidate comparison now.",
-              },
-            ],
-          },
-        ],
-        generationConfig: {
-          temperature: 0.25,
-          topP: 0.9,
-          topK: 32,
-          maxOutputTokens: 900,
-          responseMimeType: "application/json",
-        },
+        candidateNames: params.candidateNames,
+        issues: params.issues,
+        location: params.location,
       }),
     });
 
     if (!response.ok) {
-      throw new Error(`Gemini API failed with status ${response.status}`);
+      return buildFallbackAnalysis(params);
     }
 
-    const data = await response.json();
-    const text = data?.candidates?.[0]?.content?.parts?.map((part: { text?: string }) => part.text || "").join("") || "";
-    const parsed = parseGeminiJson(text);
-
-    if (!parsed) {
-      throw new Error("Gemini returned invalid candidate analysis payload");
+    const data = (await response.json()) as { analysis?: unknown; source?: unknown };
+    if (typeof data.analysis !== "string" || !data.analysis.trim()) {
+      return buildFallbackAnalysis(params);
     }
 
-    return parsed;
-  } catch (error) {
-    throw new Error(error instanceof Error ? error.message : "Candidate analysis failed");
+    return {
+      analysis: data.analysis,
+      source: typeof data.source === "string" ? data.source : "agent-service",
+    };
+  } catch {
+    return buildFallbackAnalysis(params);
   } finally {
     clearTimeout(timeoutId);
   }
@@ -150,11 +91,11 @@ export async function POST(request: NextRequest) {
     );
   } catch (error) {
     return NextResponse.json(
-      {
-        error: "Candidate analysis service unavailable",
-        details: error instanceof Error ? error.message : String(error),
-      },
-      { status: 503 }
+      buildFallbackAnalysis({
+        candidateNames,
+        issues,
+        location,
+      })
     );
   }
 }

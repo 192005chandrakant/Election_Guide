@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { doc, getDoc } from "firebase/firestore";
-import { getServerFirestore } from "@/lib/server-firestore";
+import { getAdminFirestore } from "@/lib/admin-firestore";
 import { mergeUserProfile, type StoredUserProfile } from "@/lib/user-profile";
 
 export async function GET(request: NextRequest) {
@@ -8,12 +7,12 @@ export async function GET(request: NextRequest) {
   const userId = searchParams.get("userId") || "demo";
 
   try {
-    const db = getServerFirestore();
-    const userRef = doc(db, "users", userId);
-    const userSnap = await getDoc(userRef);
+    const db = getAdminFirestore();
+    const userRef = db.collection("users").doc(userId);
+    const userSnap = await userRef.get();
     const profile = mergeUserProfile(
       userId,
-      userSnap.exists()
+      userSnap.exists
         ? (userSnap.data() as Partial<Record<keyof StoredUserProfile, unknown>>)
         : null
     );
@@ -34,9 +33,18 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error("GET /api/readiness failed:", error);
     return NextResponse.json({
-      error: "Readiness service unavailable",
-      details: error instanceof Error ? error.message : String(error),
-      source: "firestore",
-    }, { status: 503 });
+      score: 45,
+      items: {
+        registered: false,
+        polling_place: false,
+        id_ready: false,
+        research: false,
+        plan: false,
+      },
+      location: "Unknown",
+      isFirstTimeVoter: true,
+      source: "fallback",
+      warning: "Readiness profile fallback used because Firestore was unavailable",
+    });
   }
 }

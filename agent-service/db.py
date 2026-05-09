@@ -1,4 +1,5 @@
 import os
+import json
 from typing import List, Dict, Any
 from dotenv import load_dotenv
 
@@ -8,6 +9,11 @@ firebase_admin = None
 credentials = None
 firestore = None
 db = None
+
+
+def load_service_account_info(path: str) -> Dict[str, Any]:
+    with open(path, "r", encoding="utf-8-sig") as handle:
+        return json.load(handle)
 
 # Initialize Firebase Admin when available. The service should still start
 # without it so local development can use the rule-based fallbacks.
@@ -20,15 +26,25 @@ try:
     credentials = firebase_credentials
     firestore = firebase_firestore
 
+    firebase_project_id = os.getenv("FIREBASE_PROJECT_ID")
+
     if not firebase_admin._apps:
         service_account_path = os.getenv("FIREBASE_SERVICE_ACCOUNT_PATH")
-        if service_account_path and os.path.exists(service_account_path):
-            cred = credentials.Certificate(service_account_path)
-            firebase_admin.initialize_app(cred)
+        service_account_json = os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON")
+
+        if service_account_json:
+            # Secret Manager can inject service account JSON directly as env var.
+            service_account_info = json.loads(service_account_json.lstrip("\ufeff"))
+            cred = credentials.Certificate(service_account_info)
+            firebase_admin.initialize_app(cred, {"projectId": firebase_project_id} if firebase_project_id else None)
+        elif service_account_path and os.path.exists(service_account_path):
+            service_account_info = load_service_account_info(service_account_path)
+            cred = credentials.Certificate(service_account_info)
+            firebase_admin.initialize_app(cred, {"projectId": firebase_project_id} if firebase_project_id else None)
         else:
             # Fallback to Application Default Credentials if running in GCP
             # or if the user has authenticated via gcloud locally
-            firebase_admin.initialize_app()
+            firebase_admin.initialize_app(options={"projectId": firebase_project_id} if firebase_project_id else None)
     
     db = firestore.client()
     print("Firebase Admin initialized and Firestore client ready.")

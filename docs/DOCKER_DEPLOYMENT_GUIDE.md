@@ -54,7 +54,7 @@ gcloud run deploy civicguide-agent `
   --region $REGION `
   --platform managed `
   --allow-unauthenticated `
-  --set-env-vars="GEMINI_API_KEY=AIzaSyBuEkEqYdOZ_gpQE--GLzeAERY-tNR3aUM,FIREBASE_PROJECT_ID=promptwar-cddf1"
+  --set-env-vars="GEMINI_API_KEY=[REDACTED_GEMINI_API_KEY],FIREBASE_PROJECT_ID=promptwar-cddf1"
 
 # Deploy Web Service
 $AGENT_URL = gcloud run services describe civicguide-agent --region $REGION --format="value(status.url)"
@@ -64,7 +64,7 @@ gcloud run deploy civicguide-web `
   --region $REGION `
   --platform managed `
   --allow-unauthenticated `
-  --set-env-vars="AGENT_SERVICE_URL=$AGENT_URL,NEXT_PUBLIC_FIREBASE_API_KEY=AIzaSyCNMFTowGSImfl8-sT2TYc8Iak-5AXBAak,NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=promptwar-cddf1.firebaseapp.com,NEXT_PUBLIC_FIREBASE_PROJECT_ID=promptwar-cddf1,NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=promptwar-cddf1.firebasestorage.app,NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=1072664273807,NEXT_PUBLIC_FIREBASE_APP_ID=1:1072664273807:web:9c7d9e7917ac01f5d8a1fa,NEXT_PUBLIC_FIREBASE_VAPID_KEY=BBdNsFv6g-ZFFydfIoFPRVgQZxDHcTCyVjSSnw0zh0KHZ9ifEeTYdL4yRxErlBVZUnAZymRvFVBRBbKi_kP3nV4,NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=AIzaSyDYWL4mILugV4-q2V9xVO2YqmXNHfT72hY,GEMINI_API_KEY=AIzaSyBuEkEqYdOZ_gpQE--GLzeAERY-tNR3aUM"
+  --set-env-vars="AGENT_SERVICE_URL=$AGENT_URL,NEXT_PUBLIC_FIREBASE_API_KEY=[REDACTED_API_KEY],NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=promptwar-cddf1.firebaseapp.com,NEXT_PUBLIC_FIREBASE_PROJECT_ID=promptwar-cddf1,NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=promptwar-cddf1.firebasestorage.app,NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=1072664273807,NEXT_PUBLIC_FIREBASE_APP_ID=1:1072664273807:web:9c7d9e7917ac01f5d8a1fa,NEXT_PUBLIC_FIREBASE_VAPID_KEY=[REDACTED_VAPID_KEY],NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=[REDACTED_API_KEY],GEMINI_API_KEY=[REDACTED_GEMINI_API_KEY]"
 ```
 
 ---
@@ -131,7 +131,7 @@ gcloud run deploy civicguide-agent \
   --source . \
   --region us-central1 \
   --allow-unauthenticated \
-  --set-env-vars="GEMINI_API_KEY=AIzaSyBuEkEqYdOZ_gpQE--GLzeAERY-tNR3aUM,FIREBASE_PROJECT_ID=promptwar-cddf1"
+  --set-env-vars="GEMINI_API_KEY=[REDACTED_GEMINI_API_KEY],FIREBASE_PROJECT_ID=promptwar-cddf1"
 
 # Web Service
 cd ../web

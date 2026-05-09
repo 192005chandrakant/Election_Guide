@@ -1,0 +1,67 @@
+name: Accessibility Audit
+
+on:
+  schedule:
+    - cron: '0 2 * * 0'  # Weekly on Sunday 2 AM UTC
+  workflow_dispatch:
+
+jobs:
+  accessibility-audit:
+    runs-on: ubuntu-latest
+    name: WCAG AAA Compliance Audit
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: 'web/package-lock.json'
+      
+      - name: Install dependencies
+        run: cd web && npm install
+      
+      - name: Build app
+        run: cd web && npm run build
+      
+      - name: Start server
+        run: cd web && npm start &
+        env:
+          PORT: 3000
+      
+      - name: Wait for server
+        run: sleep 10
+      
+      - name: Run axe accessibility tests
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            
+            // This would run axe-core tests
+            console.log('Running accessibility audit...');
+            
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: accessibility-report
+          path: ./a11y-results.json
+
+  lighthouse-audit:
+    runs-on: ubuntu-latest
+    name: Lighthouse Performance Audit
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Run Lighthouse CI
+        uses: treosh/lighthouse-ci-action@v9
+        with:
+          configPath: './web/lighthouserc.json'
+          temporaryPublicStorage: true

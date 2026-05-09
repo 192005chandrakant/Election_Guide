@@ -1,27 +1,36 @@
 importScripts("https://www.gstatic.com/firebasejs/10.12.1/firebase-app-compat.js");
 importScripts("https://www.gstatic.com/firebasejs/10.12.1/firebase-messaging-compat.js");
 
-const firebaseConfig = {
-  apiKey: "AIzaSyCNMFTowGSImfl8-sT2TYc8Iak-5AXBAak",
-  authDomain: "promptwar-cddf1.firebaseapp.com",
-  projectId: "promptwar-cddf1",
-  storageBucket: "promptwar-cddf1.firebasestorage.app",
-  messagingSenderId: "1072664273807",
-  appId: "1:1072664273807:web:9c7d9e7917ac01f5d8a1fa"
-};
+async function initFirebaseMessaging() {
+  try {
+    const response = await fetch("/api/firebase-config", { cache: "no-store" });
+    if (!response.ok) {
+      throw new Error(`firebase-config fetch failed: ${response.status}`);
+    }
 
-firebase.initializeApp(firebaseConfig);
-const messaging = firebase.messaging();
+    const firebaseConfig = await response.json();
+    if (!firebaseConfig || typeof firebaseConfig.apiKey !== "string" || !firebaseConfig.apiKey) {
+      throw new Error("firebase-config missing apiKey");
+    }
 
-messaging.onBackgroundMessage((payload) => {
-  console.log('[firebase-messaging-sw.js] Received background message ', payload);
-  const notificationTitle = payload.notification.title;
-  const notificationOptions = {
-    body: payload.notification.body,
-    icon: '/favicon.ico',
-    badge: '/favicon.ico',
-    data: payload.data
-  };
+    firebase.initializeApp(firebaseConfig);
+    const messaging = firebase.messaging();
 
-  self.registration.showNotification(notificationTitle, notificationOptions);
-});
+    messaging.onBackgroundMessage((payload) => {
+      console.log("[firebase-messaging-sw.js] Received background message ", payload);
+      const notificationTitle = payload?.notification?.title || "CivicGuide";
+      const notificationOptions = {
+        body: payload?.notification?.body || "",
+        icon: "/favicon.ico",
+        badge: "/favicon.ico",
+        data: payload?.data,
+      };
+
+      self.registration.showNotification(notificationTitle, notificationOptions);
+    });
+  } catch (error) {
+    console.warn("[firebase-messaging-sw.js] Firebase init skipped:", error);
+  }
+}
+
+initFirebaseMessaging();

@@ -4,9 +4,16 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:clean": "node -e \"require('fs').rmSync('.next',{recursive:true,force:true})\"",
+    "dev:reset": "npm run dev:clean && next dev",
+    "dev:agent": "cd ..\\agent-service && ..\\.venv\\Scripts\\python.exe -m uvicorn main:app --host 127.0.0.1 --port 8000 --reload",
+    "dev:full": "concurrently -k -n AGENT,WEB -c green,cyan \"npm run dev:agent\" \"npm run dev:reset\"",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",
@@ -27,13 +34,21 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@testing-library/jest-dom": "^6.1.5",
+    "@testing-library/react": "^14.1.2",
+    "@testing-library/user-event": "^14.5.1",
+    "@types/jest": "^29.5.11",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0",
     "shadcn": "^4.4.0",
+    "concurrently": "^9.2.1",
     "tailwindcss": "^4",
+    "ts-jest": "^29.1.1",
     "typescript": "^5"
   }
 }

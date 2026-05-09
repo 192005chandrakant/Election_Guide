@@ -27,28 +27,12 @@
    - CPU: 1
    - Set Environment Variables:
      ```
-     GEMINI_API_KEY=AIzaSyBuEkEqYdOZ_gpQE--GLzeAERY-tNR3aUM
+   GEMINI_API_KEY=[REDACTED_GEMINI_API_KEY]
      FIREBASE_PROJECT_ID=promptwar-cddf1
      ```
    - Click **Deploy**
 
-3. **Deploy Web Service**
-   - Repeat for web directory
-   - After agent deploys, get its URL
-   - Add AGENT_SERVICE_URL environment variable:
-     ```
-     AGENT_SERVICE_URL=https://civicguide-agent-[hash]-uc.a.run.app
-     NEXT_PUBLIC_FIREBASE_API_KEY=AIzaSyCNMFTowGSImfl8-sT2TYc8Iak-5AXBAak
-     NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=promptwar-cddf1.firebaseapp.com
-     NEXT_PUBLIC_FIREBASE_PROJECT_ID=promptwar-cddf1
-     NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=promptwar-cddf1.firebasestorage.app
-     NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=1072664273807
-     NEXT_PUBLIC_FIREBASE_APP_ID=1:1072664273807:web:9c7d9e7917ac01f5d8a1fa
-     NEXT_PUBLIC_FIREBASE_VAPID_KEY=BBdNsFv6g-ZFFydfIoFPRVgQZxDHcTCyVjSSnw0zh0KHZ9ifEeTYdL4yRxErlBVZUnAZymRvFVBRBbKi_kP3nV4
-     NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=AIzaSyDYWL4mILugV4-q2V9xVO2YqmXNHfT72hY
-     GEMINI_API_KEY=AIzaSyBuEkEqYdOZ_gpQE--GLzeAERY-tNR3aUM
-     ```
-
+3
 ---
 
 ### Method 2: Using Git Bash (Terminal without alternate buffer issue)
@@ -61,34 +45,11 @@
    gcloud auth login
    ```
 
-3. **Deploy Agent Service**
-   ```bash
-   cd agent-service
-   gcloud run deploy civicguide-agent \
-     --source . \
-     --region us-central1 \
-     --allow-unauthenticated \
-     --set-env-vars="GEMINI_API_KEY=AIzaSyBuEkEqYdOZ_gpQE--GLzeAERY-tNR3aUM,FIREBASE_PROJECT_ID=promptwar-cddf1" \
-     --memory 1Gi \
-     --cpu 1
-   ```
+
 
 4. **Get Agent URL and Deploy Web**
    ```bash
-   AGENT_URL=$(gcloud run services describe civicguide-agent --region us-central1 --format="value(status.url)")
-   
-   cd ../web
-   gcloud run deploy civicguide-web \
-     --source . \
-     --region us-central1 \
-     --allow-unauthenticated \
-     --set-env-vars="AGENT_SERVICE_URL=$AGENT_URL,NEXT_PUBLIC_FIREBASE_API_KEY=AIzaSyCNMFTowGSImfl8-sT2TYc8Iak-5AXBAak,NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=promptwar-cddf1.firebaseapp.com,NEXT_PUBLIC_FIREBASE_PROJECT_ID=promptwar-cddf1,NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=promptwar-cddf1.firebasestorage.app,NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=1072664273807,NEXT_PUBLIC_FIREBASE_APP_ID=1:1072664273807:web:9c7d9e7917ac01f5d8a1fa,NEXT_PUBLIC_FIREBASE_VAPID_KEY=BBdNsFv6g-ZFFydfIoFPRVgQZxDHcTCyVjSSnw0zh0KHZ9ifEeTYdL4yRxErlBVZUnAZymRvFVBRBbKi_kP3nV4,NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=AIzaSyDYWL4mILugV4-q2V9xVO2YqmXNHfT72hY,GEMINI_API_KEY=AIzaSyBuEkEqYdOZ_gpQE--GLzeAERY-tNR3aUM" \
-     --memory 1Gi \
-     --cpu 1
-   ```
-
----
-
+   AGENT_URL=$(gcloud run services describe civicguide-agent --region us-central1 
 ### Method 3: Using Cloud Build (Automated CI/CD)
 
 1. Connect GitHub to Google Cloud Build

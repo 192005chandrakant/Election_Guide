@@ -2,6 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { CIVIC_AGENTS, getCivicAgent } from "@/lib/civic-agents";
 
 const AGENT_SERVICE_URL = process.env.AGENT_SERVICE_URL || "http://127.0.0.1:8000";
+const DEFAULT_AGENT_TIMEOUT_MS = 120_000;
+
+function getAgentTimeoutMs() {
+  const raw = process.env.AGENT_SERVICE_TIMEOUT_MS;
+  const parsed = raw ? Number.parseInt(raw, 10) : Number.NaN;
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return DEFAULT_AGENT_TIMEOUT_MS;
+  }
+
+  // Guardrails to avoid accidental infinite / overly long timeouts.
+  return Math.min(Math.max(parsed, 5_000), 300_000);
+}
 
 type ChatRequestBody = {
   query?: string;
@@ -79,7 +91,7 @@ export async function POST(request: NextRequest) {
   const agent = getCivicAgent(requestedAgentMode || undefined);
   const normalizedLanguage = language || "en";
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 45000);
+  const timeoutId = setTimeout(() => controller.abort(), getAgentTimeoutMs());
 
   try {
     const response = await fetch(`${AGENT_SERVICE_URL}/chat`, {
@@ -128,19 +140,27 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("Chat API Error:", error);
     const message = error instanceof Error ? error.message : String(error);
+
+    const isTimeoutError =
+      (typeof DOMException !== "undefined" && error instanceof DOMException && error.name === "AbortError") ||
+      message.toLowerCase().includes("aborted") ||
+      message.toLowerCase().includes("aborterror");
+
     const isConnectionError =
-      message.includes("fetch failed") ||
-      message.includes("ECONNREFUSED") ||
-      message.includes("aborted");
+      message.includes("fetch failed") || message.includes("ECONNREFUSED") || message.includes("ENOTFOUND");
+
+    const status = isTimeoutError ? 504 : isConnectionError ? 502 : 500;
 
     return NextResponse.json(
       {
-        error: isConnectionError
-          ? "AI agent service is unreachable. Verify AGENT_SERVICE_URL and backend availability."
-          : "Chat request failed while processing with the AI service.",
+        error: isTimeoutError
+          ? "AI agent request timed out. The backend may be slow or rate-limited; try again or increase AGENT_SERVICE_TIMEOUT_MS."
+          : isConnectionError
+            ? "AI agent service is unreachable. Verify AGENT_SERVICE_URL and backend availability."
+            : "Chat request failed while processing with the AI service.",
         details: message,
       },
-      { status: 500 }
+      { status }
     );
   } finally {
     clearTimeout(timeoutId);
