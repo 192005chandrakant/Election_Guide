@@ -33,13 +33,14 @@ export default function AccessibilityMenu() {
             className="absolute bottom-16 left-0 mb-4 w-72 rounded-2xl border border-white/10 bg-background/80 p-4 shadow-2xl backdrop-blur-xl"
           >
             <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-sm font-semibold flex items-center gap-2">
+              <h3 className="text-sm font-semibold flex items-center gap-2" suppressHydrationWarning>
                 <Accessibility className="h-4 w-4 text-primary" /> {t("a11y.accessibility")}
               </h3>
               <button
                 onClick={() => setIsOpen(false)}
                 className="text-muted-foreground hover:text-foreground"
-                aria-label={t("a11y.hideMenu")}
+                aria-label="Close accessibility menu"
+                suppressHydrationWarning
               >
                 <X className="h-4 w-4" />
               </button>
@@ -126,8 +127,9 @@ export default function AccessibilityMenu() {
       <Button
         size="icon"
         onClick={() => setIsOpen(!isOpen)}
-        aria-label={isOpen ? t("a11y.hideMenu") : t("a11y.showMenu")}
+        aria-label={isOpen ? "Close accessibility menu" : "Open accessibility menu"}
         className="h-14 w-14 rounded-full shadow-2xl hover:scale-105 transition-transform"
+        suppressHydrationWarning
       >
         <Accessibility className="h-6 w-6" />
       </Button>

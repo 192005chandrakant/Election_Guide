@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { User, onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
+import { checkRedirectResult, logAuthError } from "@/lib/auth-utils";
 
 type AuthContextType = {
   user: User | null;
@@ -24,12 +25,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // Check for redirect result first (from popup fallback to redirect)
+    const checkRedirect = async () => {
+      try {
+        const result = await checkRedirectResult(auth);
+        if (result?.user) {
+          setUser(result.user);
+        }
+      } catch (err) {
+        logAuthError(err, "checkRedirectResult");
+      }
+    };
+    
+    checkRedirect();
+
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       setUser(firebaseUser);
       setLoading(false);
       setError(null);
     }, (err) => {
-      console.error("Auth state change error:", err);
+      logAuthError(err, "onAuthStateChanged");
       setError(err.message);
       setLoading(false);
     });

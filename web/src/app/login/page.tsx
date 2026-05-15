@@ -6,14 +6,15 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { auth } from "@/lib/firebase";
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from "firebase/auth";
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { Loader2 } from "lucide-react";
 import BrandLogo from "@/components/brand-logo";
+import { signInWithGoogle, formatAuthError, logAuthError } from "@/lib/auth-utils";
 
-function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "Authentication failed. Please try again.";
+function getErrorMessage(error: unknown): string {
+  return formatAuthError(error);
 }
 
 export default function LoginPage() {
@@ -55,7 +56,9 @@ export default function LoginPage() {
         router.push("/onboarding"); // new user → onboarding
       }
     } catch (err: unknown) {
-      setError(getErrorMessage(err));
+      const errorMsg = getErrorMessage(err);
+      logAuthError(err, "handleEmailAuth");
+      setError(errorMsg);
     } finally {
       setLoading(false);
     }
@@ -65,13 +68,15 @@ export default function LoginPage() {
     setLoading(true);
     setError("");
     try {
-      const provider = new GoogleAuthProvider();
-      const result = await signInWithPopup(auth, provider);
+      const result = await signInWithGoogle(auth);
+      
       // If new user, go to onboarding; otherwise dashboard
       const isNewUser = result.user.metadata.creationTime === result.user.metadata.lastSignInTime;
       router.push(isNewUser ? "/onboarding" : "/dashboard");
     } catch (err: unknown) {
-      setError(getErrorMessage(err));
+      const errorMsg = getErrorMessage(err);
+      logAuthError(err, "handleGoogleAuth");
+      setError(errorMsg);
     } finally {
       setLoading(false);
     }

@@ -23,25 +23,28 @@ function applyCorsHeaders(request: NextRequest, response: NextResponse) {
  * Implements OWASP best practices
  */
 function applySecurityHeaders(response: NextResponse) {
-  // Content Security Policy
+  // Content Security Policy - allow Firebase and Google frames/scripts
   response.headers.set(
     "Content-Security-Policy",
     [
-      "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://www.google-analytics.com https://www.gstatic.com https://apis.google.com",
+      "default-src 'self' https:",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://www.google-analytics.com https://www.gstatic.com https://apis.google.com https://accounts.google.com",
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "img-src 'self' data: https: blob:",
       "font-src 'self' https://fonts.gstatic.com",
-      "connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://*.firebaseapp.com https://*.cloudfunctions.net https://www.google-analytics.com https://googletagmanager.com https://*.google.com",
-      "frame-ancestors 'none'",
+      "connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://*.firebaseapp.com https://*.cloudfunctions.net https://www.google-analytics.com https://googletagmanager.com https://*.google.com wss:",
+      // Allow Firebase auth handler and Google accounts to be framed where necessary
+      "frame-src 'self' https://*.firebaseapp.com https://accounts.google.com https://apis.google.com https://*.googleusercontent.com",
+      // Allow specific origins to embed us (avoid blocking necessary postMessage flows)
+      "frame-ancestors 'self' https://*.firebaseapp.com https://accounts.google.com",
       "base-uri 'self'",
       "form-action 'self'",
       "upgrade-insecure-requests",
     ].join("; ")
   );
 
-  // Prevent clickjacking
-  response.headers.set("X-Frame-Options", "DENY");
+  // Allow framing from same origin; do not completely deny framing
+  response.headers.set("X-Frame-Options", "SAMEORIGIN");
 
   // Prevent MIME type sniffing
   response.headers.set("X-Content-Type-Options", "nosniff");

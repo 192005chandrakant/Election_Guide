@@ -1,5 +1,10 @@
 import os
 import warnings
+import logging
+import json
+import time
+import sys
+from datetime import datetime
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import Optional, List, Dict
@@ -12,22 +17,98 @@ from tools import (
     get_valid_voter_ids_india,
 )
 
+# ─── Structured Logging ───
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    stream=sys.stdout
+)
+logger = logging.getLogger(__name__)
+
 warnings.simplefilter("ignore", FutureWarning)
 
 try:
     import google.generativeai as genai
 except ModuleNotFoundError:
     genai = None
+    logger.warning("google.generativeai not available")
 
 load_dotenv()
+
+# ─── Health Status Tracking ───
+class HealthStatus:
+    def __init__(self):
+        self.startup_time = datetime.utcnow()
+        self.gemini_available = False
+        self.db_available = False
+        self.last_error = None
+        self.error_count = 0
+        self.request_count = 0
+        
+    def reset_startup(self):
+        self.startup_time = datetime.utcnow()
+        self.error_count = 0
+    
+    def log_error(self, error: Exception):
+        self.last_error = str(error)
+        self.error_count += 1
+        logger.error(f"Health error: {error}")
+    
+    def log_request(self):
+        self.request_count += 1
+
+health_status = HealthStatus()
+
+# ─── MISSING FUNCTION - Rule-based next steps fallback ───
+def get_rule_based_next_steps(req: "NextStepsRequest") -> List[str]:
+    """Generate rule-based fallback next steps when Gemini is unavailable."""
+    location = req.location.strip() if req.location else "Unknown"
+    
+    base_steps = [
+        "Check your voter registration status on the NVSP portal (nvsp.in)",
+        "Verify your polling station and voting location",
+        "Prepare your valid photo ID (EPIC, Aadhaar, Passport, etc.)",
+    ]
+    
+    if req.isFirstTimeVoter:
+        base_steps = [
+            "Apply for voter registration using Form 6 on NVSP or your state ECI portal",
+            "Collect proof of age, address, and identity documents",
+            "Track your registration application status online",
+        ] + base_steps
+    
+    pending = [k for k, v in req.checklistProgress.items() if not v]
+    if pending:
+        specific_steps = {
+            "registration": "Complete your voter registration on NVSP.in before the deadline",
+            "id_ready": "Gather valid photo ID - EPIC, Aadhaar, Passport, or Driving License",
+            "polling_location": "Find your assigned polling station on the NVSP voter search tool",
+            "voting_plan": "Plan your travel to the polling station and voting time",
+        }
+        for item in pending:
+            if item in specific_steps:
+                base_steps.insert(0, specific_steps[item])
+                break
+    
+    return base_steps[:3]
+
 
 # Initialize Gemini API
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 ENABLE_GEMINI = os.getenv("ENABLE_GEMINI", "false").lower() in {"1", "true", "yes"}
+
 if not GEMINI_API_KEY or genai is None:
-    print("Warning: GEMINI_API_KEY not set. Using fallback responses.")
+    logger.warning("Gemini API Key not set or genai package unavailable. Using fallback responses.")
+    health_status.gemini_available = False
 else:
-    genai.configure(api_key=GEMINI_API_KEY)
+    try:
+        genai.configure(api_key=GEMINI_API_KEY)
+        health_status.gemini_available = True
+        logger.info("Gemini API configured successfully")
+    except Exception as e:
+        logger.error(f"Failed to configure Gemini: {e}")
+        health_status.gemini_available = False
+        health_status.log_error(e)
 
 
 DEFAULT_ALLOWED_ORIGINS = [
@@ -528,15 +609,60 @@ def get_agent_by_mode(mode: str) -> AgentInfo:
 
 @app.get("/")
 async def root():
-    return {"status": "running", "service": "CivicGuide Agent API", "version": "1.0.0"}
+    health_status.log_request()
+    return {
+        "status": "running",
+        "service": "CivicGuide Agent API",
+        "version": "1.0.0",
+        "timestamp": datetime.utcnow().isoformat(),
+    }
 
 
 @app.get("/health")
 async def health_check():
+    """Basic health check endpoint."""
+    health_status.log_request()
+    uptime_seconds = (datetime.utcnow() - health_status.startup_time).total_seconds()
+    
     return {
-        "status": "healthy",
-        "gemini_configured": GEMINI_API_KEY is not None and genai is not None,
+        "status": "healthy" if not health_status.error_count else "degraded",
+        "timestamp": datetime.utcnow().isoformat(),
+        "uptime_seconds": uptime_seconds,
+        "gemini_available": health_status.gemini_available,
+        "request_count": health_status.request_count,
+        "error_count": health_status.error_count,
     }
+
+
+@app.get("/ready")
+async def readiness_check():
+    """Cloud Run readiness probe - checks if service is ready to serve."""
+    health_status.log_request()
+    uptime_seconds = (datetime.utcnow() - health_status.startup_time).total_seconds()
+    
+    # Give service 5 seconds to fully initialize
+    if uptime_seconds < 5:
+        logger.warning(f"Service still initializing (uptime: {uptime_seconds}s)")
+        return {"ready": False, "reason": "Initializing"}
+    
+    # Consider ready if no critical errors yet
+    ready = health_status.error_count < 5
+    
+    if not ready:
+        logger.error(f"Service not ready: error_count={health_status.error_count}")
+        return {"ready": False, "reason": f"Too many errors: {health_status.error_count}"}
+    
+    return {
+        "ready": True,
+        "timestamp": datetime.utcnow().isoformat(),
+        "gemini": health_status.gemini_available,
+    }
+
+
+@app.get("/live")
+async def liveness_check():
+    """Cloud Run liveness probe - checks if service process is alive."""
+    return {"alive": True}
 
 
 @app.get("/agents")
@@ -548,148 +674,219 @@ async def list_agents():
 
 @app.post("/chat", response_model=StructuredChatResponse)
 async def chat_endpoint(req: ChatRequest):
-    if not ENABLE_GEMINI or not GEMINI_API_KEY or genai is None:
-        return build_fallback_chat_response(req, get_agent_by_mode(req.agentMode), "Gemini disabled or unavailable")
+    """Main chat endpoint with comprehensive error handling."""
+    health_status.log_request()
+    request_id = f"{int(time.time() * 1000)}-{req.userId[:10]}"
+    
+    try:
+        logger.info(f"[{request_id}] Chat request from user {req.userId}, mode: {req.agentMode}, query length: {len(req.query)}")
+        
+        if not ENABLE_GEMINI or not health_status.gemini_available or not GEMINI_API_KEY or genai is None:
+            logger.warning(f"[{request_id}] Gemini disabled or unavailable, using fallback")
+            fallback_response = build_fallback_chat_response(req, get_agent_by_mode(req.agentMode), "Gemini disabled or unavailable")
+            fallback_response.source = "fallback"
+            return fallback_response
 
-    # Prefer supported flash models and allow overrides via environment variables.
-    models_to_try = get_gemini_model_candidates()
-    if not models_to_try:
-        return build_fallback_chat_response(req, get_agent_by_mode(req.agentMode), "No allowed Gemini models configured")
-    last_error = None
+        # Prefer supported flash models and allow overrides via environment variables.
+        models_to_try = get_gemini_model_candidates()
+        if not models_to_try:
+            logger.error(f"[{request_id}] No allowed Gemini models configured")
+            return build_fallback_chat_response(req, get_agent_by_mode(req.agentMode), "No allowed Gemini models configured")
+        
+        last_error = None
+        agent = get_agent_by_mode(req.agentMode)
 
-    for model_name in models_to_try:
-        try:
-            print(f"DIAGNOSTIC: Attempting chat with model: {model_name}")
-            agent = get_agent_by_mode(req.agentMode)
-            system_prompt = get_chat_system_prompt(req)
-            history = get_chat_history(req.userId)
-            
-            # Configure model
-            model = genai.GenerativeModel(
-                model_name,
-                tools=agent_tools,
-                system_instruction=system_prompt,
-                generation_config={"response_mime_type": "application/json"}
-            )
-            
-            chat = model.start_chat(
-                history=history,
-                enable_automatic_function_calling=True
-            )
-            
-            response = chat.send_message(req.query)
-            
-            import json
-            raw_text = response.text.strip()
-            # Robust JSON cleaning
-            if "{" in raw_text:
-                start_idx = raw_text.find("{")
-                end_idx = raw_text.rfind("}") + 1
-                raw_text = raw_text[start_idx:end_idx]
-            
+        for attempt, model_name in enumerate(models_to_try, 1):
             try:
-                data = json.loads(raw_text)
-                print(f"SUCCESS: Model {model_name} responded correctly.")
-            except json.JSONDecodeError:
-                print(f"WARNING: JSON Decode failed for {model_name}. Attempting to wrap raw text.")
-                data = {
-                    "summary": "Generated a response but had trouble formatting it.",
-                    "answer": response.text,
-                    "keyPoints": [],
-                    "nextSteps": [],
-                    "followUpQuestions": [],
-                    "actionSuggestions": [],
-                    "trust": {"source": "mixed", "confidence": "medium", "note": "Format error"},
-                    "disclaimer": "Automated response.",
-                    "speechText": "I have provided an answer below."
-                }
-            
-            save_chat_interaction(req.userId, req.query, data.get("answer", response.text))
-            return StructuredChatResponse(**data, source=f"gemini:{model_name}:{agent.id}")
+                logger.info(f"[{request_id}] Attempting chat with model {model_name} (attempt {attempt}/{len(models_to_try)})")
+                
+                system_prompt = get_chat_system_prompt(req)
+                history = get_chat_history(req.userId)
+                
+                # Configure model with timeout
+                model = genai.GenerativeModel(
+                    model_name,
+                    tools=agent_tools,
+                    system_instruction=system_prompt,
+                    generation_config={"response_mime_type": "application/json"}
+                )
+                
+                chat = model.start_chat(
+                    history=history,
+                    enable_automatic_function_calling=True
+                )
+                
+                # Send message with error handling
+                response = chat.send_message(req.query)
+                
+                raw_text = response.text.strip()
+                logger.debug(f"[{request_id}] Raw response length: {len(raw_text)}")
+                
+                # Robust JSON cleaning
+                if "{" in raw_text:
+                    start_idx = raw_text.find("{")
+                    end_idx = raw_text.rfind("}") + 1
+                    raw_text = raw_text[start_idx:end_idx]
+                
+                try:
+                    data = json.loads(raw_text)
+                    logger.info(f"[{request_id}] Successfully parsed response from model {model_name}")
+                    
+                    # Validate required fields
+                    required_fields = ["summary", "answer", "keyPoints", "nextSteps", "followUpQuestions", "actionSuggestions", "trust", "disclaimer", "speechText"]
+                    for field in required_fields:
+                        if field not in data:
+                            data[field] = None
+                    
+                except json.JSONDecodeError as je:
+                    logger.warning(f"[{request_id}] JSON Decode failed for {model_name}: {je}. Wrapping response.")
+                    data = {
+                        "summary": "Generated a response but had trouble formatting it.",
+                        "answer": response.text,
+                        "keyPoints": [],
+                        "nextSteps": [],
+                        "followUpQuestions": [],
+                        "actionSuggestions": [],
+                        "trust": {"source": "mixed", "confidence": "medium", "note": "Format error"},
+                        "disclaimer": "Automated response.",
+                        "speechText": "I have provided an answer below."
+                    }
+                
+                try:
+                    save_chat_interaction(req.userId, req.query, data.get("answer", response.text))
+                except Exception as save_err:
+                    logger.error(f"[{request_id}] Error saving chat interaction: {save_err}")
+                
+                logger.info(f"[{request_id}] Chat completed successfully with {model_name}")
+                return StructuredChatResponse(**data, source=f"gemini:{model_name}:{agent.id}")
 
-        except Exception as e:
-            print(f"ERROR: Model {model_name} failed. Error type: {type(e).__name__}. Message: {str(e)}")
-            last_error = e
-            continue
+            except Exception as e:
+                error_msg = f"{type(e).__name__}: {str(e)}"
+                logger.error(f"[{request_id}] Model {model_name} failed: {error_msg}")
+                health_status.log_error(e)
+                last_error = e
+                continue
 
-    # If all models fail, return a structured fallback instead of a 500.
-    print(f"CRITICAL: All models failed! Last error: {str(last_error)}")
-    return build_fallback_chat_response(
-        req,
-        get_agent_by_mode(req.agentMode),
-        f"Gemini fallback used after model errors: {last_error}",
-    )
+        # If all models fail, return a structured fallback instead of a 500.
+        logger.error(f"[{request_id}] All models failed! Last error: {last_error}")
+        fallback = build_fallback_chat_response(
+            req,
+            agent,
+            f"Gemini fallback used after model errors: {last_error}",
+        )
+        return fallback
+
+    except Exception as e:
+        logger.error(f"[{request_id}] Unexpected error in chat endpoint: {e}", exc_info=True)
+        health_status.log_error(e)
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
 @app.post("/notify")
 async def send_push_notification(req: PushNotificationRequest):
     """Trigger a push notification to a specific user's device via FCM."""
-    token = get_user_fcm_token(req.userId)
-    if not token:
-        return {"error": "User does not have an FCM token registered."}
-        
+    health_status.log_request()
+    request_id = f"{int(time.time() * 1000)}-{req.userId[:10]}"
+    
     try:
-        from firebase_admin import messaging
-        message = messaging.Message(
-            notification=messaging.Notification(
-                title=req.title,
-                body=req.body,
-            ),
-            data=req.data or {},
-            token=token,
-        )
-        response = messaging.send(message)
-        return {"success": True, "message_id": response}
+        logger.info(f"[{request_id}] Notification request for user {req.userId}")
+        
+        token = get_user_fcm_token(req.userId)
+        if not token:
+            logger.warning(f"[{request_id}] User {req.userId} has no FCM token")
+            return {"error": "User does not have an FCM token registered.", "success": False}
+        
+        try:
+            from firebase_admin import messaging
+            message = messaging.Message(
+                notification=messaging.Notification(
+                    title=req.title,
+                    body=req.body,
+                ),
+                data=req.data or {},
+                token=token,
+            )
+            response = messaging.send(message)
+            logger.info(f"[{request_id}] Notification sent successfully: {response}")
+            return {"success": True, "message_id": response}
+        except Exception as e:
+            logger.error(f"[{request_id}] Error sending notification: {e}")
+            health_status.log_error(e)
+            return {"error": str(e), "success": False}
+    
     except Exception as e:
-        print(f"Error sending push notification: {e}")
-        return {"error": str(e)}
+        logger.error(f"[{request_id}] Unexpected error in notification: {e}", exc_info=True)
+        health_status.log_error(e)
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
 @app.post("/summarize", response_model=SummarizeResponse)
 async def summarize_endpoint(req: SummarizeRequest):
     """Summarize election-related text in simple language."""
-    if not ENABLE_GEMINI or not GEMINI_API_KEY or genai is None:
+    health_status.log_request()
+    request_id = f"{int(time.time() * 1000)}-{hash(req.text) % 10000}"
+    
+    try:
+        logger.info(f"[{request_id}] Summarize request, text length: {len(req.text)}")
+        
+        if not ENABLE_GEMINI or not health_status.gemini_available or not GEMINI_API_KEY or genai is None:
+            logger.warning(f"[{request_id}] Gemini unavailable, using fallback")
+            fallback_summary = req.text.strip().split(".")[0].strip() or "Summary unavailable. Please verify with official election sources."
+            return SummarizeResponse(summary=fallback_summary)
+
+        style = "for a 15-year-old using simple words and short sentences" if req.simpleMode else "clearly and concisely"
+        prompt = f"Summarize the following election-related text {style}:\n\n{req.text}"
+
+        models_to_try = get_gemini_model_candidates()
+        if not models_to_try:
+            fallback_summary = req.text.strip().split(".")[0].strip() or "Summary unavailable. Please verify with official election sources."
+            return SummarizeResponse(summary=fallback_summary)
+
+        last_error = None
+        for model_name in models_to_try:
+            try:
+                logger.info(f"[{request_id}] Trying model {model_name} for summarization")
+                model = genai.GenerativeModel(model_name)
+                response = model.generate_content(prompt)
+                logger.info(f"[{request_id}] Summarize successful with {model_name}")
+                return SummarizeResponse(summary=response.text)
+            except Exception as e:
+                logger.error(f"[{request_id}] Summarize error (model={model_name}): {e}")
+                health_status.log_error(e)
+                last_error = e
+
+        logger.error(f"[{request_id}] All summarize models failed. Last error: {last_error}")
         fallback_summary = req.text.strip().split(".")[0].strip() or "Summary unavailable. Please verify with official election sources."
         return SummarizeResponse(summary=fallback_summary)
-
-    style = "for a 15-year-old using simple words and short sentences" if req.simpleMode else "clearly and concisely"
-    prompt = f"Summarize the following election-related text {style}:\n\n{req.text}"
-
-    models_to_try = get_gemini_model_candidates()
-    if not models_to_try:
-        fallback_summary = req.text.strip().split(".")[0].strip() or "Summary unavailable. Please verify with official election sources."
-        return SummarizeResponse(summary=fallback_summary)
-
-    last_error = None
-    for model_name in models_to_try:
-        try:
-            model = genai.GenerativeModel(model_name)
-            response = model.generate_content(prompt)
-            return SummarizeResponse(summary=response.text)
-        except Exception as e:
-            print(f"Summarize error (model={model_name}): {e}")
-            last_error = e
-
-    fallback_summary = req.text.strip().split(".")[0].strip() or "Summary unavailable. Please verify with official election sources."
-    return SummarizeResponse(summary=fallback_summary)
+    
+    except Exception as e:
+        logger.error(f"[{request_id}] Unexpected error in summarize: {e}", exc_info=True)
+        health_status.log_error(e)
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
 @app.post("/analyze-candidates", response_model=CandidateAnalysisResponse)
 async def analyze_candidates(req: CandidateAnalysisRequest):
     """Analyze and compare candidates on specified issues."""
-    issues_str = ", ".join(req.issues)
-
-    fallback_analysis = (
-        f"Gemini was unavailable, so compare {', '.join(req.candidateNames)} using official manifestos, affidavits, and ECI records. "
-        f"Focus on these issues: {issues_str or 'your priority issues'}. Always verify facts from official sources before deciding."
-    )
-
-    if not ENABLE_GEMINI or not GEMINI_API_KEY or genai is None:
-        return CandidateAnalysisResponse(analysis=fallback_analysis)
-
-    candidates_str = ", ".join(req.candidateNames)
-    prompt = f"""Provide a brief, non-partisan comparison of the following Indian election candidates: {candidates_str}
+    health_status.log_request()
+    request_id = f"{int(time.time() * 1000)}-{hash(','.join(req.candidateNames)) % 10000}"
+    
+    try:
+        logger.info(f"[{request_id}] Candidate analysis for: {', '.join(req.candidateNames)}")
         
+        issues_str = ", ".join(req.issues)
+        fallback_analysis = (
+            f"Gemini was unavailable, so compare {', '.join(req.candidateNames)} using official manifestos, affidavits, and ECI records. "
+            f"Focus on these issues: {issues_str or 'your priority issues'}. Always verify facts from official sources before deciding."
+        )
+
+        if not ENABLE_GEMINI or not health_status.gemini_available or not GEMINI_API_KEY or genai is None:
+            logger.warning(f"[{request_id}] Gemini unavailable, using fallback")
+            return CandidateAnalysisResponse(analysis=fallback_analysis)
+
+        candidates_str = ", ".join(req.candidateNames)
+        prompt = f"""Provide a brief, non-partisan comparison of the following Indian election candidates: {candidates_str}
+            
 Compare them on these issues: {issues_str}
 Location context: {req.location}
 
@@ -697,39 +894,56 @@ Format as a clear, bullet-pointed comparison that helps Indian voters understand
 Use Indian election context: refer to constituencies, ECI rules, party manifestos.
 Keep it factual and balanced."""
 
-    models_to_try = get_gemini_model_candidates()
-    if not models_to_try:
+        models_to_try = get_gemini_model_candidates()
+        if not models_to_try:
+            logger.warning(f"[{request_id}] No models available for candidate analysis")
+            return CandidateAnalysisResponse(analysis=fallback_analysis)
+
+        last_error = None
+        for model_name in models_to_try:
+            try:
+                logger.info(f"[{request_id}] Analyzing candidates with {model_name}")
+                model = genai.GenerativeModel(model_name)
+                response = model.generate_content(prompt)
+                logger.info(f"[{request_id}] Candidate analysis successful with {model_name}")
+                return CandidateAnalysisResponse(analysis=response.text)
+            except Exception as e:
+                logger.error(f"[{request_id}] Candidate analysis error (model={model_name}): {e}")
+                health_status.log_error(e)
+                last_error = e
+
+        logger.error(f"[{request_id}] All candidate analysis models failed")
         return CandidateAnalysisResponse(analysis=fallback_analysis)
-
-    last_error = None
-    for model_name in models_to_try:
-        try:
-            model = genai.GenerativeModel(model_name)
-            response = model.generate_content(prompt)
-            return CandidateAnalysisResponse(analysis=response.text)
-        except Exception as e:
-            print(f"Candidate analysis error (model={model_name}): {e}")
-            last_error = e
-
-    return CandidateAnalysisResponse(analysis=fallback_analysis)
+    
+    except Exception as e:
+        logger.error(f"[{request_id}] Unexpected error in candidate analysis: {e}", exc_info=True)
+        health_status.log_error(e)
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
 @app.post("/next-steps", response_model=NextStepsResponse)
 async def next_steps(req: NextStepsRequest):
     """Generate top personalized next actions to improve voter readiness."""
-    fallback_steps = get_rule_based_next_steps(req)
+    health_status.log_request()
+    request_id = f"{int(time.time() * 1000)}-{req.userId[:10]}"
+    
+    try:
+        logger.info(f"[{request_id}] Next steps request from user {req.userId}")
+        
+        fallback_steps = get_rule_based_next_steps(req)
 
-    if not ENABLE_GEMINI or not GEMINI_API_KEY or genai is None:
-        return NextStepsResponse(steps=fallback_steps, source="fallback")
+        if not ENABLE_GEMINI or not health_status.gemini_available or not GEMINI_API_KEY or genai is None:
+            logger.warning(f"[{request_id}] Gemini unavailable, using rule-based steps")
+            return NextStepsResponse(steps=fallback_steps, source="fallback")
 
-    pending_items = [key for key, value in req.checklistProgress.items() if not value]
-    simple_hint = (
-        "Use very simple words and short sentences suitable for a teenager."
-        if req.simpleMode
-        else "Use plain, concise language."
-    )
+        pending_items = [key for key, value in req.checklistProgress.items() if not value]
+        simple_hint = (
+            "Use very simple words and short sentences suitable for a teenager."
+            if req.simpleMode
+            else "Use plain, concise language."
+        )
 
-    prompt = f"""You are a non-partisan election readiness coach.
+        prompt = f"""You are a non-partisan election readiness coach.
 Generate exactly 3 short next-action steps for this user.
 
 User context:
@@ -745,33 +959,71 @@ Requirements:
 - Return only 3 lines, one step per line, no numbering, no markdown.
 """
 
-    models_to_try = get_gemini_model_candidates()
-    if not models_to_try:
+        models_to_try = get_gemini_model_candidates()
+        if not models_to_try:
+            logger.warning(f"[{request_id}] No models available for next steps")
+            return NextStepsResponse(steps=fallback_steps, source="fallback")
+
+        for model_name in models_to_try:
+            try:
+                logger.info(f"[{request_id}] Generating next steps with {model_name}")
+                model = genai.GenerativeModel(model_name)
+                response = model.generate_content(prompt)
+                lines = [line.strip("-• \t") for line in response.text.splitlines() if line.strip()]
+                steps = [line for line in lines if len(line) > 3][:3]
+
+                if not steps:
+                    logger.warning(f"[{request_id}] No valid steps from {model_name}, trying next")
+                    continue
+
+                while len(steps) < 3:
+                    steps.append(fallback_steps[len(steps)])
+
+                logger.info(f"[{request_id}] Next steps generated successfully with {model_name}")
+                return NextStepsResponse(steps=steps[:3], source=f"gemini:{model_name}")
+            except Exception as e:
+                logger.error(f"[{request_id}] Next steps generation error (model={model_name}): {e}")
+                health_status.log_error(e)
+
+        logger.warning(f"[{request_id}] All models failed for next steps, using fallback")
         return NextStepsResponse(steps=fallback_steps, source="fallback")
-
-    for model_name in models_to_try:
-        try:
-            model = genai.GenerativeModel(model_name)
-            response = model.generate_content(prompt)
-            lines = [line.strip("-• \t") for line in response.text.splitlines() if line.strip()]
-            steps = [line for line in lines if len(line) > 3][:3]
-
-            if not steps:
-                continue
-
-            while len(steps) < 3:
-                steps.append(fallback_steps[len(steps)])
-
-            return NextStepsResponse(steps=steps[:3], source=f"gemini:{model_name}")
-        except Exception as e:
-            print(f"Next steps generation error (model={model_name}): {e}")
-
-    return NextStepsResponse(steps=fallback_steps, source="fallback")
+    
+    except Exception as e:
+        logger.error(f"[{request_id}] Unexpected error in next steps: {e}", exc_info=True)
+        health_status.log_error(e)
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
 
+
+
+# ─── Startup and Shutdown Events ───
+@app.on_event("startup")
+async def startup_event():
+    """Initialize service on startup."""
+    logger.info("=== CivicGuide Agent Service Starting ===")
+    logger.info(f"Gemini configured: {health_status.gemini_available}")
+    logger.info(f"Allowed origins: {get_allowed_origins()}")
+    logger.info(f"Allowed models: {get_allowed_gemini_models()}")
+    logger.info("=== Service Startup Complete ===")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Cleanup on shutdown."""
+    logger.info("=== CivicGuide Agent Service Shutting Down ===")
+    logger.info(f"Total requests: {health_status.request_count}")
+    logger.info(f"Total errors: {health_status.error_count}")
+    logger.info("=== Service Shutdown Complete ===")
 
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    port = int(os.getenv("PORT", 8000))
+    logger.info(f"Starting Uvicorn server on port {port}")
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=port,
+        log_level="info"
+    )
